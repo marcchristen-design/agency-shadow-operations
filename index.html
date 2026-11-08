@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AGENCY – Shadow Operations</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #101820;
+    color: #e5eaf0;
+    font: 16px/1.6 system-ui, sans-serif;
+  }
+  main { max-width: 1000px; margin: auto; padding: 32px 20px; }
+  h1 { font-size: clamp(36px, 7vw, 64px); line-height: 1.1; }
+  h2 { margin-top: 0; }
+  .label { color: #e3bd7a; letter-spacing: 3px; font-size: 12px; }
+  .muted { color: #a9b8c4; }
+  .panel {
+    background: #192630;
+    border: 1px solid #354958;
+    border-radius: 12px;
+    padding: 24px;
+    margin: 24px 0;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  button {
+    color: inherit;
+    background: #223441;
+    border: 1px solid #506575;
+    border-radius: 8px;
+    padding: 16px;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  button:hover:enabled { border-color: #e3bd7a; }
+  button[aria-pressed="true"] {
+    outline: 2px solid #e3bd7a;
+    background: #344552;
+  }
+  button:focus-visible { outline: 3px solid #ffe0a5; }
+  button:disabled { opacity: .45; cursor: default; }
+  button strong, button small { display: block; }
+  button small { margin-top: 8px; }
+  .primary {
+    background: #e3bd7a;
+    color: #101820;
+    font-weight: bold;
+    margin-top: 20px;
+  }
+  .status { display: flex; gap: 24px; flex-wrap: wrap; }
+  progress { accent-color: #e3bd7a; width: 140px; }
+  li { margin-bottom: 12px; }
+  footer { margin-top: 40px; color: #a9b8c4; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="label">VERTRAULICH · PROTOTYP 0.1</div>
+  <h1>AGENCY<br><span class="muted">Shadow Operations</span></h1>
+  <p>Führe deinen Geheimdienst. Jede Entscheidung hinterlässt Spuren.</p>
+
+  <section class="panel">
+    <div class="label">WIEN · ÖSTERREICH · 23:40 UHR</div>
+    <h2>Operation Nightfall</h2>
+    <p>
+      Ein Informant ist verschwunden. Seine letzte Nachricht deutet
+      auf einen Doppelagenten in deinem eigenen Dienst hin.
+      Finde ihn, sichere seine Informationen und bringe ihn in Sicherheit.
+    </p>
+    <p class="muted">
+      Drei Runden. Pro Runde wählst du einen Agenten und eine Taktik.
+      Jeder Agent und jede Taktik kann nur einmal eingesetzt werden.
+    </p>
+    <p class="muted">
+      Du gewinnst mit mindestens zwei erfolgreichen Runden,
+      darunter die Extraktion. Erreicht der Verdacht 6, scheitert der Einsatz.
+    </p>
+  </section>
+
+  <div class="status">
+    <strong id="round"></strong>
+    <span>
+      Verdacht: <strong id="heat">0</strong>/6
+      <progress id="meter" max="6" value="0"
+        aria-label="Verdachtslevel"></progress>
+    </span>
+    <span id="wins"></span>
+  </div>
+
+  <section id="play">
+    <h2 id="phase" style="margin-top:24px"></h2>
+    <p id="brief"></p>
+
+    <h3>1 · Agent wählen</h3>
+    <div class="grid" id="agents"></div>
+
+    <h3>2 · Taktik wählen</h3>
+    <div class="grid" id="cards"></div>
+
+    <p class="muted" id="preview"></p>
+    <button class="primary" id="execute" disabled>Runde ausführen</button>
+  </section>
+
+  <section class="panel">
+    <div aria-live="polite" aria-atomic="true">
+      <h2 id="resultTitle">Einsatzprotokoll</h2>
+      <p id="result">Wähle deinen ersten Agenten und eine Taktik.</p>
+    </div>
+    <ol id="log"></ol>
+  </section>
+
+  <button id="restart" hidden>Mission erneut spielen</button>
+
+  <footer>
+    Weitere Schauplätze folgen: Kathmandu · Istanbul · Buenos Aires
+    <p>Testversion: Belohnungen werden angezeigt, aber noch nicht gespeichert.</p>
+  </footer>
+</main>
+
+<script>
+"use strict";
+
+const agents = [
+  { name: "Ghost", role: "Infiltration", skills: [5, 2, 2, 4] },
+  { name: "Cipher", role: "Technik und Aufklärung", skills: [3, 5, 1, 5] },
+  { name: "Viper", role: "Zugriff und Schutz", skills: [3, 2, 5, 2] }
+];
+
+const cards = [
+  { name: "Falsche Identität", bonus: 3, heat: -1 },
+  { name: "Überwachungsschleife", bonus: 4, heat: 0 },
+  { name: "Ablenkungsmanöver", bonus: 5, heat: 1 }
+];
+
+const phases = [
+  {
+    name: "Observation",
+    text: "Identifiziere den Kontaktmann vor dem Hotel.",
+    focus: "Tarnung + Analyse",
+    skills: [0, 3],
+    target: 12
+  },
+  {
+    name: "Zugriff",
+    text: "Sichere die verschlüsselten Dokumente im Hotel.",
+    focus: "Technik + Tarnung",
+    skills: [1, 0],
+    target: 12
+  },
+  {
+    name: "Extraktion",
+    text: "Eskortiere den Informanten zum Fluchtfahrzeug.",
+    focus: "Kampf + Tarnung",
+    skills: [2, 0],
+    target: 10
+  }
+];
+
+const $ = id => document.getElementById(id);
+let state;
+
+function reset() {
+  state = {
+    round: 0,
+    heat: 0,
+    wins: 0,
+    agent: null,
+    card: null,
+    usedAgents: new Set(),
+    usedCards: new Set(),
+    ended: false
+  };
+  $("log").replaceChildren();
+  $("resultTitle").textContent = "Einsatzprotokoll";
+  $("result").textContent = "Wähle deinen ersten Agenten und eine Taktik.";
+  $("play").hidden = false;
+  $("restart").hidden = true;
+  render();
+}
+
+function target() {
+  return phases[state.round].target +
+    (state.round === 2 ? state.heat : 0);
+}
+
+function strength() {
+  const agent = agents[state.agent];
+  return phases[state.round].skills.reduce(
+    (total, skill) => total + agent.skills[skill], 0
+  ) + cards[state.card].bonus;
+}
+
+function updateStatus() {
+  $("round").textContent = state.ended
+    ? "Einsatz beendet"
+    : "Runde " + (state.round + 1) + " / 3";
+  $("heat").textContent = state.heat;
+  $("meter").value = state.heat;
+  $("wins").textContent = "Erfolge: " + state.wins;
+}
+
+function renderChoices(id, items, used, selection, isAgent) {
+  $(id).replaceChildren();
+
+  items.forEach((item, index) => {
+    const button = document.createElement("button");
+    button.disabled = used.has(index);
+    button.setAttribute("aria-pressed", String(selection === index));
+
+    const title = document.createElement("strong");
+    title.textContent = item.name + (used.has(index) ? " · eingesetzt" : "");
+
+    const detail = document.createElement("small");
+    if (isAgent) {
+      detail.textContent = item.role +
+        " · Tarnung " + item.skills[0] +
+        " / Technik " + item.skills[1] +
+        " / Kampf " + item.skills[2] +
+        " / Analyse " + item.skills[3];
+    } else {
+      const heatText = item.heat > 0 ? "+" + item.heat : String(item.heat);
+      detail.textContent = "+" + item.bonus +
+        " Stärke · " + heatText + " Verdacht";
+    }
+
+    button.append(title, detail);
+    button.onclick = () => {
+      if (isAgent) state.agent = index;
+      else state.card = index;
+      render();
+    };
+    $(id).append(button);
+  });
+}
+
+function render() {
+  updateStatus();
+  const phase = phases[state.round];
+
+  $("phase").textContent = (state.round + 1) + " · " + phase.name;
+  $("brief").textContent = phase.text + " " + phase.focus +
+    " zählen. Zielwert: " + target() + "." +
+    (state.round === 2
+      ? " Jeder bisherige Verdachtspunkt erhöht den Zielwert."
+      : "");
+
+  renderChoices(
+    "agents", agents, state.usedAgents, state.agent, true
+  );
+  renderChoices(
+    "cards", cards, state.usedCards, state.card, false
+  );
+
+  const ready = state.agent !== null && state.card !== null;
+  $("execute").disabled = !ready;
+  $("preview").textContent = ready
+    ? "Deine Stärke: " + strength() +
+      ". Dazu kommt ein Zufallswert von 0 bis 3. Erfolg ab " +
+      target() + ". Bei Misserfolg entstehen zusätzlich 2 Verdachtspunkte."
+    : "Wähle einen Agenten und eine Taktik. Überlege auch, wen du für die späteren Runden brauchst.";
+}
+
+function execute() {
+  if (state.ended || state.agent === null || state.card === null) return;
+
+  const phase = phases[state.round];
+  const agent = agents[state.agent];
+  const card = cards[state.card];
+  const base = strength();
+  const roll = Math.floor(Math.random() * 4);
+  const goal = target();
+  const success = base + roll >= goal;
+  const extraction = state.round === 2;
+
+  state.usedAgents.add(state.agent);
+  state.usedCards.add(state.card);
+  if (success) state.wins++;
+
+  state.heat = Math.min(
+    6, Math.max(0, state.heat + card.heat + (success ? 0 : 2))
+  );
+
+  const entry = document.createElement("li");
+  entry.textContent = phase.name + ": " + agent.name + " + " +
+    card.name + " → Stärke " + base + " + Zufall " + roll +
+    " = " + (base + roll) + " / Ziel " + goal + ". " +
+    (success ? "Erfolgreich." : "Fehlgeschlagen.") +
+    " Verdacht: " + state.heat + "/6.";
+  $("log").append(entry);
+
+  state.round++;
+  state.agent = null;
+  state.card = null;
+
+  if (state.heat >= 6 || state.round === 3) {
+    state.ended = true;
+    const victory = state.heat < 6 &&
+      state.wins >= 2 && extraction && success;
+
+    $("play").hidden = true;
+    $("restart").hidden = false;
+    $("resultTitle").textContent = victory
+      ? "Mission erfolgreich"
+      : "Mission gescheitert";
+
+    $("result").textContent = victory
+      ? "Der Informant ist in Sicherheit. Belohnung: 3.000 € Budget und 100 Erfahrungspunkte."
+      : state.heat >= 6
+        ? "Deine Tarnung ist aufgeflogen. Der Einsatz wird abgebrochen. Belohnung: 0 € und 20 Erfahrungspunkte."
+        : "Der Auftrag konnte nicht abgeschlossen werden. Du brauchst mindestens zwei Erfolge und eine erfolgreiche Extraktion. Belohnung: 0 € und 20 Erfahrungspunkte.";
+
+    updateStatus();
+    $("restart").focus();
+  } else {
+    $("result").textContent = success
+      ? "Die Operation geht weiter. Plane deinen nächsten Zug."
+      : "Der Gegner wird aufmerksam. Behalte den Verdacht im Blick.";
+    render();
+  }
+}
+
+$("execute").onclick = execute;
+$("restart").onclick = reset;
+reset();
+</script>
+</body>
+</html>
